@@ -1,57 +1,42 @@
-name: CI/CD Spring Boot + Angular
+name: CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Checkout le code
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    # 2️⃣ Configurer Java pour Spring Boot
-    - name: Set up Java
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # 3️⃣ Build backend (Spring Boot)
-    - name: Build Spring Boot backend
-      run: ./mvnw clean package -DskipTests
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./springboot/app
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/springboot-backend:latest
 
-    # 4️⃣ Configurer Node.js pour Angular
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./angular-app
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/angular-frontend:latest
 
-    # 5️⃣ Build frontend (Angular)
-    - name: Build Angular frontend
-      run: |
-        cd frontend
-        npm install
-        npm run build --prod
+      - name: Start application with Docker Compose
+        run: docker compose up -d
 
-    # 6️⃣ Login à Docker Hub
-    - name: Docker Hub Login
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Wait for services to be healthy
+        run: sleep 20
 
-    # 7️⃣ Build et push backend Docker image
-    - name: Build & Push Backend Docker image
-      run: |
-        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest ./backend
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/backend:latest
-
-    # 8️⃣ Build et push frontend Docker image
-    - name: Build & Push Frontend Docker image
-      run: |
-        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest ./frontend
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/frontend:latest
+      - name: Check running containers
+        run: docker ps
